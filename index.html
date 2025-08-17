@@ -147,27 +147,19 @@
                 });
             });
             
-             // 3. 布尔运算动画效果（通过缩放和透明度变化模拟）
-            //tl.to('#elements', {
-            //    opacity: 0.3,
-            //    scale: 0.95,
-            //    duration: 1,
-            //    ease: 'power2.inOut'
-            //}); 
-            
-            // 4. logo渐渐显现
+            // 3. logo渐渐显现
             tl.to(logo, {
                 opacity: 1,
-                duration: 1.5,
-                ease: 'power3.out' 
+                duration: 2.5,
+                ease: "sine.inOut" 
             }); // 与上一个动画重叠0.5秒
             
-            // 最后隐藏基础元素
+            // 4. 最后隐藏基础元素
             tl.to('#elements', {
                 opacity: 0,
-                duration: 0.5,
-                ease: 'power2.inOut'
-            });
+                duration: 2.5,
+                ease: "sine.inOut"
+            }, "-=2.5");
         });
     </script>
 </body>
