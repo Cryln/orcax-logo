@@ -440,14 +440,15 @@
             const canvas = document.getElementById('distortion-canvas');
             const ctx = canvas.getContext('2d');
 
-            const CELL = 8;                // 每个网格单元的像素大小
-            const MOUSE_RADIUS = 120;      // 鼠标影响半径
-            const EASE_BACK = 0.08;        // 回弹速度
-            const SCATTER = 25;            // 最大散开距离
+            const isMobile = 'ontouchstart' in window || window.innerWidth < 768;
+            const CELL = isMobile ? 5 : 8;           // 移动端更细的网格
+            const MOUSE_RADIUS = isMobile ? 80 : 120; // 移动端较小的影响半径
+            const EASE_BACK = 0.08;                    // 回弹速度
+            const SCATTER = isMobile ? 18 : 25;       // 最大散开距离
 
             let cols, rows, grid;
             let mouse = { x: -9999, y: -9999 };
-            let canvasRect;
+            let touchTimeout = null;
 
             // 渲染隐藏文字到离屏 canvas，返回像素数据
             function buildTextTexture(w, h) {
@@ -479,7 +480,6 @@
                 canvas.height = displayH * dpr;
                 ctx.scale(dpr, dpr);
 
-                canvasRect = canvas.getBoundingClientRect();
                 cols = Math.ceil(displayW / CELL);
                 rows = Math.ceil(displayH / CELL);
 
@@ -570,6 +570,22 @@
             canvas.addEventListener('mouseleave', () => {
                 mouse.x = -9999;
                 mouse.y = -9999;
+            });
+
+            // 触摸事件 — 触摸结束后自动回弹
+            canvas.addEventListener('touchmove', (e) => {
+                const touch = e.touches[0];
+                mouse.x = touch.clientX;
+                mouse.y = touch.clientY;
+                clearTimeout(touchTimeout);
+            }, { passive: true });
+
+            canvas.addEventListener('touchend', () => {
+                // 延迟回弹，让用户看到扩散效果
+                touchTimeout = setTimeout(() => {
+                    mouse.x = -9999;
+                    mouse.y = -9999;
+                }, 300);
             });
 
             window.addEventListener('resize', () => {
