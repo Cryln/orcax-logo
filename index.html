@@ -10,7 +10,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/gsap.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/MotionPathPlugin.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Space+Grotesk:wght@300;400;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=Space+Grotesk:wght@300;400;600;700&display=swap');
         
         * {
             margin: 0;
@@ -102,45 +102,31 @@
             z-index: 10;
             text-align: center;
             padding: 2rem;
+            pointer-events: none;
         }
         
-        /* 标题样式 */
-        .main-title {
-            font-family: 'Orbitron', monospace;
-            font-size: clamp(3rem, 8vw, 8rem);
-            font-weight: 900;
-            background: linear-gradient(45deg, #00d4ff, #0099cc, #0066ff, #00ffff);
-            background-size: 300% 300%;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            animation: titleGlow 3s ease-in-out infinite alternate, titleWave 4s ease-in-out infinite;
-            margin-bottom: 1rem;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            filter: drop-shadow(0 0 20px rgba(0, 212, 255, 0.5));
+        /* Distortion canvas — 铺满背景 */
+        #distortion-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100% !important;
+            height: 100% !important;
+            z-index: 3;
+            pointer-events: auto;
         }
-        
-        @keyframes titleGlow {
-            0% { background-position: 0% 50%; }
-            100% { background-position: 100% 50%; }
-        }
-        
-        @keyframes titleWave {
-            0%, 100% { transform: translateY(0px) scale(1); }
-            50% { transform: translateY(-10px) scale(1.02); }
-        }
-        
+
         .subtitle {
-            font-size: clamp(1rem, 3vw, 2rem);
-            font-weight: 300;
-            color: rgba(255, 255, 255, 0.8);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: clamp(0.9rem, 2.5vw, 1.6rem);
+            font-weight: 400;
+            color: rgba(255, 255, 255, 0.6);
             margin-bottom: 3rem;
             animation: subtitleFade 2s ease-out;
-            letter-spacing: 0.2em;
+            letter-spacing: 0.3em;
             text-transform: uppercase;
         }
-        
+
         @keyframes subtitleFade {
             0% { opacity: 0; transform: translateY(30px); }
             100% { opacity: 1; transform: translateY(0); }
@@ -210,14 +196,11 @@
         
         /* 响应式设计 */
         @media (max-width: 768px) {
-            .main-title {
-                font-size: clamp(2rem, 10vw, 4rem);
-            }
-            
             .subtitle {
-                font-size: clamp(0.8rem, 4vw, 1.2rem);
+                font-size: clamp(0.7rem, 3vw, 1rem);
+                letter-spacing: 0.15em;
             }
-            
+
             svg {
                 max-height: 40vh;
             }
@@ -236,11 +219,13 @@
     
     <!-- 粒子效果 -->
     <div class="particles" id="particles"></div>
-    
+
+    <!-- 像素扭曲效果 -->
+    <canvas id="distortion-canvas"></canvas>
+
     <!-- 主容器 -->
     <div class="main-container">
         <!-- 标题区域 -->
-        <h1 class="main-title">ORCAX</h1>
         <p class="subtitle">Dive in the Digital Ocean</p>
         
         <!-- SVG容器 -->
@@ -390,12 +375,6 @@
             }, "-=2.5");
             
             // 添加额外的动画效果
-            // 标题动画
-            gsap.fromTo('.main-title', 
-                { opacity: 0, y: 50 },
-                { opacity: 1, y: 0, duration: 2, ease: "power2.out", delay: 1 }
-            );
-            
             // 副标题动画
             gsap.fromTo('.subtitle', 
                 { opacity: 0, y: 30 },
@@ -423,11 +402,6 @@
                 shape.style.transform += ` translate(${x}px, ${y}px)`;
             });
             
-            // 为标题添加微妙的光影变化
-            const title = document.querySelector('.main-title');
-            const lightX = mouseX * 100;
-            const lightY = mouseY * 100;
-            title.style.filter = `drop-shadow(${lightX - 50}px ${lightY - 50}px 20px rgba(0, 212, 255, 0.5))`;
         });
         
         // 添加点击波纹效果
@@ -460,6 +434,154 @@
             }
         `;
         document.head.appendChild(style);
+
+        // ── 像素扭曲效果 (Canvas 2D) ──
+        (function () {
+            const canvas = document.getElementById('distortion-canvas');
+            const ctx = canvas.getContext('2d');
+
+            const CELL = 8;                // 每个网格单元的像素大小
+            const MOUSE_RADIUS = 120;      // 鼠标影响半径
+            const EASE_BACK = 0.08;        // 回弹速度
+            const SCATTER = 25;            // 最大散开距离
+
+            let cols, rows, grid;
+            let mouse = { x: -9999, y: -9999 };
+            let canvasRect;
+
+            // 渲染隐藏文字到离屏 canvas，返回像素数据
+            function buildTextTexture(w, h) {
+                const off = document.createElement('canvas');
+                off.width = w;
+                off.height = h;
+                const oc = off.getContext('2d');
+
+                // 绘制 "ORCAX" 文字 — 居中偏上
+                oc.fillStyle = '#000';
+                oc.fillRect(0, 0, w, h);
+
+                const fontSize = Math.min(w * 0.15, h * 0.25);
+                oc.font = `800 ${fontSize}px Syne, sans-serif`;
+                oc.textAlign = 'center';
+                oc.textBaseline = 'middle';
+                oc.fillStyle = '#fff';
+                oc.fillText('ORCAX', w / 2, h * 0.22);
+
+                return oc.getImageData(0, 0, w, h);
+            }
+
+            function initGrid() {
+                const dpr = window.devicePixelRatio || 1;
+                const displayW = window.innerWidth;
+                const displayH = window.innerHeight;
+
+                canvas.width = displayW * dpr;
+                canvas.height = displayH * dpr;
+                ctx.scale(dpr, dpr);
+
+                canvasRect = canvas.getBoundingClientRect();
+                cols = Math.ceil(displayW / CELL);
+                rows = Math.ceil(displayH / CELL);
+
+                const textData = buildTextTexture(cols, rows);
+                grid = [];
+
+                for (let r = 0; r < rows; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        const idx = (r * cols + c) * 4;
+                        const brightness = textData.data[idx]; // 0 = bg, 255 = text
+
+                        let color;
+                        if (brightness > 128) {
+                            // 文字像素 — 青色调
+                            const hue = 180 + Math.random() * 30;      // 180-210 (cyan–blue)
+                            const sat = 70 + Math.random() * 30;
+                            const lit = 50 + Math.random() * 20;
+                            color = `hsl(${hue}, ${sat}%, ${lit}%)`;
+                        } else {
+                            // 背景像素 — 极微弱的暗色网格
+                            const lit = 4 + Math.random() * 3;
+                            color = `hsl(210, 15%, ${lit}%)`;
+                        }
+
+                        grid.push({
+                            homeX: c * CELL,
+                            homeY: r * CELL,
+                            x: c * CELL,
+                            y: r * CELL,
+                            color: color,
+                            isText: brightness > 128,
+                            alpha: brightness > 128 ? 0 : 0.25,   // 文字默认隐藏，背景极淡
+                            targetAlpha: brightness > 128 ? 0 : 0.25,
+                        });
+                    }
+                }
+            }
+
+            function animate() {
+                const displayW = window.innerWidth;
+                const displayH = window.innerHeight;
+                ctx.clearRect(0, 0, displayW, displayH);
+
+                for (let i = 0; i < grid.length; i++) {
+                    const p = grid[i];
+
+                    // 计算鼠标距离
+                    const dx = mouse.x - (p.homeX + CELL / 2);
+                    const dy = mouse.y - (p.homeY + CELL / 2);
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist < MOUSE_RADIUS) {
+                        const force = (1 - dist / MOUSE_RADIUS);
+                        const angle = Math.atan2(dy, dx);
+                        // 散开：远离鼠标方向
+                        const pushX = -Math.cos(angle) * force * SCATTER;
+                        const pushY = -Math.sin(angle) * force * SCATTER;
+                        p.x += (p.homeX + pushX - p.x) * 0.2;
+                        p.y += (p.homeY + pushY - p.y) * 0.2;
+                        // 鼠标附近 → 显示文字像素，隐藏背景像素
+                        p.targetAlpha = p.isText ? (0.6 + force * 0.4) : (0.08 * (1 - force));
+                    } else {
+                        // 回归原位
+                        p.x += (p.homeX - p.x) * EASE_BACK;
+                        p.y += (p.homeY - p.y) * EASE_BACK;
+                        p.targetAlpha = p.isText ? 0 : 0.25;
+                    }
+
+                    p.alpha += (p.targetAlpha - p.alpha) * 0.1;
+
+                    if (p.alpha < 0.01) continue;
+
+                    ctx.globalAlpha = p.alpha;
+                    ctx.fillStyle = p.color;
+                    ctx.fillRect(p.x, p.y, CELL - 1, CELL - 1);
+                }
+
+                ctx.globalAlpha = 1;
+                requestAnimationFrame(animate);
+            }
+
+            // 鼠标事件
+            canvas.addEventListener('mousemove', (e) => {
+                mouse.x = e.clientX;
+                mouse.y = e.clientY;
+            });
+
+            canvas.addEventListener('mouseleave', () => {
+                mouse.x = -9999;
+                mouse.y = -9999;
+            });
+
+            window.addEventListener('resize', () => {
+                initGrid();
+            });
+
+            // 等字体加载后再初始化
+            document.fonts.ready.then(() => {
+                initGrid();
+                animate();
+            });
+        })();
     </script>
 </body>
 
